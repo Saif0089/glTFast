@@ -18,13 +18,23 @@ namespace GLTFast
         readonly bool m_HasBones;
         readonly int m_MorphTargetCount;
 
+        /// <summary>
+        /// Draco compressed primitives are decoded by <see cref="DracoMeshGenerator"/> and
+        /// uncompressed ones by <see cref="MeshGenerator"/>, but the generator is picked once
+        /// per <see cref="PrimitiveSet"/>, off its first primitive. Without this, a compressed
+        /// and an uncompressed primitive whose attributes match would land in the same set and
+        /// whichever came second would be handed to the wrong generator.
+        /// </summary>
+        readonly bool m_IsDracoCompressed;
+
         VertexBufferDescriptor(
             bool hasNormals,
             bool hasTangents,
             int texCoordCount,
             bool hasColors,
             bool hasBones,
-            int morphTargetCount
+            int morphTargetCount,
+            bool isDracoCompressed
             )
         {
             m_HasNormals = hasNormals;
@@ -33,6 +43,16 @@ namespace GLTFast
             m_HasColors = hasColors;
             m_HasBones = hasBones;
             m_MorphTargetCount = morphTargetCount;
+            m_IsDracoCompressed = isDracoCompressed;
+        }
+
+        static bool IsDracoCompressed(MeshPrimitiveBase primitive)
+        {
+#if DRACO_IS_INSTALLED
+            return primitive.IsDracoCompressed;
+#else
+            return false;
+#endif
         }
 
         public static VertexBufferDescriptor FromPrimitive(MeshPrimitiveBase primitive)
@@ -43,7 +63,8 @@ namespace GLTFast
                 primitive.attributes.GetTexCoordsCount(),
                 primitive.attributes.COLOR_0 >= 0,
                 primitive.attributes.WEIGHTS_0 >= 0 && primitive.attributes.JOINTS_0 >= 0,
-                primitive.targets?.Length ?? 0
+                primitive.targets?.Length ?? 0,
+                IsDracoCompressed(primitive)
             );
         }
 
@@ -56,7 +77,8 @@ namespace GLTFast
                 m_TexCoordCount,
                 m_HasColors,
                 m_HasBones,
-                m_MorphTargetCount
+                m_MorphTargetCount,
+                m_IsDracoCompressed
             );
 #else
             var hash = 13;
@@ -70,6 +92,8 @@ namespace GLTFast
             if (m_HasBones)
                 hash = hash * 31 + 16;
             hash = hash * 31 + m_MorphTargetCount;
+            if (m_IsDracoCompressed)
+                hash = hash * 31 + 17;
             return hash;
 #endif
         }
@@ -83,7 +107,8 @@ namespace GLTFast
                 && m_TexCoordCount == other.m_TexCoordCount
                 && m_HasColors == other.m_HasColors
                 && m_HasBones == other.m_HasBones
-                && m_MorphTargetCount == other.m_MorphTargetCount;
+                && m_MorphTargetCount == other.m_MorphTargetCount
+                && m_IsDracoCompressed == other.m_IsDracoCompressed;
         }
 
         public static bool operator ==(VertexBufferDescriptor lhs, VertexBufferDescriptor rhs) => lhs.Equals(rhs);
